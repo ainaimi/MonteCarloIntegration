@@ -13,8 +13,22 @@ pacman::p_load(
 expit <- function(x){ exp(x)/(1+exp(x)) }
 logit <- function(x){ log(x/(1-x)) }
 
-## FUNCTION
+## Function to deploy Monte Carlo integration for the noncollapsibility 
+## example
 cluster_sim <- function(nsim, sample_size, effect, exposure_value, referent_value){
+  # `nsim` is an index that can be used to track which Monte Carlo simulation is 
+  # being run. Because this integration approach uses a single large Monte Carlo
+  # sample, it can be set to 1, or some value that can be used as a seed.
+  # 
+  # `sample_size` is the number of simulated observations that will be used to 
+  # integrate. the larger this value is, the more stable the Monte Carlo integral 
+  # calculation for the true parameter will be.
+  # 
+  # `effect` allows users to automate specifying the conditionally adjusted log odds ratio
+  # which will change the value the marginally adjusted log-odds ratio.
+  # 
+  # `exposure_value` and `referent_value` are the values of the exposure that one
+  # wants to use to compute the numerator and denominator odds values.
 
   set.seed(nsim)
   n = sample_size
@@ -28,8 +42,8 @@ cluster_sim <- function(nsim, sample_size, effect, exposure_value, referent_valu
   A0 <- referent_value # set the exposure to referent value
   
   beta<-c(-2.75, effect, log(2))
-  mu1 <- mean(expit(beta[1] + beta[2]*A1 + beta[3]*C))
-  mu0 <- mean(expit(beta[1] + beta[2]*A0 + beta[3]*C))
+  mu1 <- mean(expit(beta[1] + beta[2]*A1 + beta[3]*C)) # note that these values do not draw from the RNG
+  mu0 <- mean(expit(beta[1] + beta[2]*A0 + beta[3]*C)) # note that these values do not draw from the RNG
   
   ## compute the marginal odds ratio from these mus
   odds_ratio <- (mu1/(1-mu1))/(mu0/(1-mu0))
@@ -38,6 +52,18 @@ cluster_sim <- function(nsim, sample_size, effect, exposure_value, referent_valu
   return(odds_ratio)
 
 }
+
+## this for loop builds up three sets of results: 
+## ## one set with a monte carlo sample of 5e5 = 500,000
+## ## one set with a monte carlo sample of 5e6 = 5,000,000
+## ## one set with a monte carlo sample of 5e7 = 50,000,000
+## 
+## additionally, the loop runs this code via parallel processing across ten 
+## cores. this allows us to compare how much the results change for each 
+## effective sample size over ten runs. 
+## 
+## note: this loop may not work on Windows systems. Interested users can convert
+## to the parLapply function.
 
 results <- NULL
 for (i in c(5,6,7)){
@@ -57,8 +83,14 @@ for (i in c(5,6,7)){
                    do.call(rbind, res))
 }
 
-results
+results <- data.frame(results)
 
-cbind(results[,1] - results[,3],
-      results[,2] - results[,3],
-      results[,3] - results[,3])
+names(results) <- c("MC_5e5", "MC_5e6", "MC_5e7")
+
+## here, the MC_5eX column presents the marginally adjusted odds ratio for the 
+## sample size corresponding to 5eX across all ten cores. 
+## 
+## we observe variability in the fourth decimal place for the smallest sample size. 
+## increasing the sample size to fifty million yields no variability in the fourth decimal place
+
+results
